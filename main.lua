@@ -18,8 +18,17 @@ local cp
 
 local bg
 
+local canvas = love.graphics.newCanvas(W, H)
+
 local time = 0
-splash = .5
+local splash = .5
+
+local zoom = love.graphics.newQuad(0, 0, 16, 16, 1, 1)
+
+local straight
+local snap
+
+local lastElement = 0
 
 do
 	local quad = love.graphics.newQuad(0, 0, W, H, 16, 16)
@@ -31,6 +40,14 @@ RU5ErkJggg==
 	img:setWrap("repeat", "repeat")
 	bg = function()
 		love.graphics.draw(img, quad)
+	end
+end
+
+local addElement = function(element)
+	lastElement = lastElement + 1
+	elements[lastElement] = element
+	for i = lastElement + 1, #elements do
+		elements[i] = nil
 	end
 end
 
@@ -65,16 +82,19 @@ end
 
 
 love.draw = function(pure)
+	local mx, my = love.mouse.getPosition()
+	love.graphics.setCanvas(canvas)
 	love.graphics.setColor(1,1,1)
 	if not pure then
 		bg()
 	end
 	love.graphics.draw(i)
-	for i, v in ipairs(elements) do
-		drawElement(v)
+	for i = 1, lastElement do
+		drawElement(elements[i])
 	end
 
 	if pure then
+		love.graphics.setCanvas()
 		return
 	end
 
@@ -100,23 +120,51 @@ love.draw = function(pure)
 		love.graphics.setFont(font[H/10])
 		love.graphics.printf("EDIT", 0, H/3, W, "center")
 	end
+	love.graphics.setCanvas()
+	love.graphics.setColor(1,1,1)
+	love.graphics.draw(canvas)
+	if choosing then
+		zoom:setViewport(mx, my, 1, 1, W, H)
+		love.graphics.draw(canvas, zoom, mx - 8, my - 8, 0, 16, 16)
+		love.graphics.setColor(1, 1, 1, 0.6)
+		love.graphics.rectangle("line", mx - 9, my - 9, 18, 18)
+	end
+	if not text and love.keyboard.isDown("space") then
+		love.graphics.setColor(1, 1, 1, 0.3)
+		love.graphics.setLineWidth(1)
+		love.graphics.line(0, my - .5, W, my - .5)
+		love.graphics.line(mx - .5, 0, mx - .5, H)
+	end
+
 end
 
 
 love.mousepressed = function(x, y, b)
 	if b == 1 and not text then
-		line = {x, y, c = settings.color(), t = "line"}
+		line = {x, y, c = settings.color(), t = "line", straight = straight}
 	elseif b == 2 then
 		CP:create(x - 128, y - 128, 128)
 		cp = CP
+	elseif b == 3 then
+		choosing = true
 	end
 end
 
 
 love.mousemoved = function(x, y)
 	if line then
-		line[#line + 1] = x
-		line[#line + 1] = y
+		if snap and line.straight then
+			local dy = y - line[2]
+			local dx = x - line[1]
+			local a = math.atan2(dy, dx)
+			local d = (dy*dy + dx*dx) ^ .5
+			a = math.floor(a / math.pi * 8 + .5)/8 * math.pi
+			line[3] = line[1] + math.cos(a) * d
+			line[4] = line[2] + math.sin(a) * d
+		else
+			line[math.max(3, #line + (line.straight and -1 or 1))] = x
+			line[math.max(4, #line + (line.straight and 0 or 1))] = y
+		end
 	end
 end
 
@@ -126,7 +174,7 @@ love.mousereleased = function(x, y, b)
 		if not line then
 			return
 		end
-		elements[#elements + 1] = line
+		addElement(line)
 		line.size = settings.radius
 		line = nil
 	elseif b == 2 then
@@ -138,6 +186,13 @@ love.mousereleased = function(x, y, b)
 		if line then
 			line.c = settings.color()
 		end
+	elseif b == 3 then
+		choosing = false
+		local mx, my = love.mouse.getPosition()
+		love.graphics.captureScreenshot(function(imgD)
+			local r, g, b = canvas:newImageData(1, 1, mx, my, 1, 1):getPixel(0, 0)
+			settings.color[1], settings.color[2], settings.color[3] = r, g, b
+		end)
 	end
 end
 
@@ -148,22 +203,37 @@ love.keypressed = function(k, kk)
 		if not text then
 			text = {t = "text", text = "", time = time, c = settings.color()}
 		elseif not love.keyboard.isDown("lshift", "rshift") then
-			elements[#elements + 1] = text
+			addElement(text)
 			text.x, text.y = love.mouse.getPosition()
+			text.size = settings.fontSize
 			text.time = nil
 			text = nil
 		end
 		return
+	elseif k == "escape" then
+		text = nil
+		choosing = nil
+	elseif k == "shift" or k == "rshift" or k == "lshift" then
+		straight = true
+	elseif k == "ctrl" or k == "rctrl" or k == "lctrl" then
+		snap = true
 	end
 
 	if not text then
 		if k == "z" and love.keyboard.isDown("lctrl", "rctrl") then
-			elements[#elements] = nil
+			--elements[#elements] = nil
+			lastElement = math.max(0, lastElement - 1)
+		elseif k == "y" and love.keyboard.isDown("lctrl", "rctrl") then
+			lastElement = math.min(#elements, lastElement + 1)
 		end
-	else
-		if k == "escape" then
-			text = nil
-		end
+	end
+end
+
+love.keyreleased = function(k, kk)
+	if k == "shift" or k == "lshift" or k == "rshift" then
+		straight = false
+	elseif k == "ctrl" or k == "rctrl" or k == "lctrl" then
+		snap = false
 	end
 end
 
@@ -185,9 +255,7 @@ end
 
 
 love.quit = function()
-	local c = love.graphics.newCanvas(W, H)
-	love.graphics.setCanvas(c)
+	
 	love.draw(true)
-	love.graphics.setCanvas()
-	io.write(c:newImageData():encode("png"):getString())
+	io.write(canvas:newImageData():encode("png"):getString())
 end
