@@ -1,9 +1,12 @@
 local smooth = require "smooth"
 local CP = require "colorPicker"
 
+require "utils"
+
 local i = love.graphics.newImage(love.image.newImageData(love.filesystem.newFileData(io.stdin:read "*a", "input.png")))
 local W, H = i:getWidth(), i:getHeight()
 local elements = {}
+local undone = {}
 
 local settings = {
 	color = setmetatable({1, 1, 1}, {__call = function(self) return {unpack(self)} end}),
@@ -14,6 +17,8 @@ local font = setmetatable({}, {__index = function(t, i) if tonumber(i) then t[i]
 
 local line
 local text
+local cropping
+local viewport = {0, 0, W, H}
 local cp
 
 local bg
@@ -24,11 +29,6 @@ local time = 0
 local splash = .5
 
 local zoom = love.graphics.newQuad(0, 0, 16, 16, 1, 1)
-
-local straight
-local snap
-
-local lastElement = 0
 
 do
 	local quad = love.graphics.newQuad(0, 0, W, H, 16, 16)
@@ -43,33 +43,66 @@ RU5ErkJggg==
 	end
 end
 
-local addElement = function(element)
-	lastElement = lastElement + 1
-	elements[lastElement] = element
-	for i = lastElement + 1, #elements do
-		elements[i] = nil
+local resize = function(newViewport)
+	W, H = newViewport[3], newViewport[4]
+	canvas = love.graphics.newCanvas(W, H)
+	viewport = {unpack(newViewport)}
+	love.window.setMode(W, H)
+end
+
+local addElement = function(element, redone)
+	elements[#elements + 1] = element
+	if not redone then
+		undone = {}
+	end
+	if element.t == "crop" then
+		resize(element.viewport)
 	end
 end
 
+local undo = function()
+	if #elements == 0 then return end
+	local element = elements[#elements]
+	undone[#undone + 1] = element
+	elements[#elements] = nil
+	if element.t == "crop" then
+		resize(element.oldViewport)
+	end
+end
+
+local redo = function()
+	if #undone == 0 then return end
+	addElement(undone[#undone], true)
+	undone[#undone] = nil
+end
+
 local drawElement = function(e, x, y)
-	love.graphics.setColor(e.c)
+	x = x or 0
+	y = y or 0
+	if e.c then
+		love.graphics.setColor(e.c)
+	end
 	if e.t == "line" then
 		if #e < 4 then return end
+		love.graphics.push()
+		love.graphics.translate(-x, -y)
 		love.graphics.setLineWidth(e.size or settings.radius)
 		love.graphics.line(smooth(e, 3))
+		love.graphics.pop()
 	elseif e.t == "text" then
 		local c = ""
-		if e.time and (e.time - time)%1 < .5 then
+		if e.time and (e.time - time)%1 < 0.5 then
 			c = "|"
 		end
 		love.graphics.setFont(font[e.size or settings.fontSize])
-		love.graphics.print(e.text .. c, x or e.x, y or e.y)
+		love.graphics.print(e.text .. c, e.x or x, e.y or y)
 	end
 end
 
 
 love.window.setMode(W, H)
 love.window.setTitle("NixEdit")
+love.keyboard.setKeyRepeat(true)
 
 
 love.update = function(dt)
@@ -88,9 +121,11 @@ love.draw = function(pure)
 	if not pure then
 		bg()
 	end
+	love.graphics.push()
+	love.graphics.translate(-viewport[1], -viewport[2])
 	love.graphics.draw(i)
-	for i = 1, lastElement do
-		drawElement(elements[i])
+	for i, v in ipairs(elements) do
+		drawElement(v)
 	end
 
 	if pure then
@@ -98,20 +133,23 @@ love.draw = function(pure)
 		return
 	end
 
+	love.graphics.setCanvas()
+	love.graphics.setColor(1,1,1)
+	love.graphics.pop()
+	love.graphics.draw(canvas)
+	if cp then
+		love.graphics.setColor(0, 0, 0, 0.1)
+		love.graphics.rectangle("fill", 0, 0, W+1, H+1)
+		cp:draw()
+	end
 	if line then
-		drawElement(line)
+		drawElement(line, viewport[1], viewport[2])
 	elseif text then
 		drawElement(text, love.mouse.getPosition())
 	else
 		love.graphics.setColor(settings.color)
 		love.graphics.setLineWidth(1)
 		love.graphics.circle("line", love.mouse.getX(), love.mouse.getY(), settings.radius, settings.radius*4)
-	end
-
-	if cp then
-		love.graphics.setColor(0, 0, 0, 0.1)
-		love.graphics.rectangle("fill", 0, 0, W+1, H+1)
-		cp:draw()
 	end
 	if splash > 0 then
 		love.graphics.setColor(1, 1, 1, (splash)^2)
@@ -120,40 +158,90 @@ love.draw = function(pure)
 		love.graphics.setFont(font[H/10])
 		love.graphics.printf("EDIT", 0, H/3, W, "center")
 	end
-	love.graphics.setCanvas()
-	love.graphics.setColor(1,1,1)
-	love.graphics.draw(canvas)
 	if choosing then
 		zoom:setViewport(mx, my, 1, 1, W, H)
 		love.graphics.draw(canvas, zoom, mx - 8, my - 8, 0, 16, 16)
 		love.graphics.setColor(1, 1, 1, 0.6)
 		love.graphics.rectangle("line", mx - 9, my - 9, 18, 18)
 	end
-	if not text and love.keyboard.isDown("space") then
-		love.graphics.setColor(1, 1, 1, 0.3)
-		love.graphics.setLineWidth(1)
-		love.graphics.line(0, my - .5, W, my - .5)
-		love.graphics.line(mx - .5, 0, mx - .5, H)
-	end
+	if love.keyboard.isDown("space") then
+		if cropping then
+			local font = font[12]
+			love.graphics.setColor(1,1,1, .5)
+			love.graphics.setFont(font)
 
+			love.graphics.print(cropping.viewport[3] .. "x" .. cropping.viewport[4], cropping.viewport[1] + 2, cropping.viewport[2]) -- move down below, after calculating margins
+			local mrx, mry, mlx, mly, mtx, mty, mbx, mby
+
+			mlx = math.max(0, cropping.viewport[1] - font:getWidth(tostring(cropping.viewport[1])) - 2)
+			mly = cropping.viewport[2] + cropping.viewport[4] / 2 - font:getHeight() / 2
+			love.graphics.print(cropping.viewport[1], mlx, mly)
+
+			mrx = math.min(cropping.viewport[1] + cropping.viewport[3], W - font:getWidth(W - cropping.viewport[1] - cropping.viewport[3]))
+			mry = mly
+			love.graphics.print(W - cropping.viewport[1] - cropping.viewport[3], mrx, mry)
+
+			mtx = cropping.viewport[1]
+			mty = math.max(0, cropping.viewport[2] - font:getHeight())
+			love.graphics.printf(cropping.viewport[2], mtx, mty, cropping.viewport[3], "center")
+
+			mbx = cropping.viewport[1]
+			mby = math.min(H, cropping.viewport[2] + cropping.viewport[4])
+			love.graphics.printf(H - cropping.viewport[2] - cropping.viewport[4], mbx, mby, cropping.viewport[3], "center")
+		elseif text then
+			--obviously nothing
+		else
+			love.graphics.setColor(1, 1, 1, 0.3)
+			love.graphics.setLineWidth(1)
+			love.graphics.line(0, my - .5, W, my - .5)
+			love.graphics.line(mx - .5, 0, mx - .5, H)
+		end
+	end
+	if cropping then
+		local x, y, w, h = unpack(cropping.viewport)
+		x = x - viewport[1]
+		y = y - viewport[2]
+		love.graphics.setColor(1,1,1, .5)
+		love.graphics.setLineWidth(2)
+		love.graphics.rectangle("line", x, y, w, h)
+		love.graphics.stencil(function() love.graphics.rectangle("fill", x, y, w, h) end, "invert")
+		love.graphics.setStencilTest("notequal", 255)
+		love.graphics.setColor(0, 0, 0, .5)
+		love.graphics.rectangle("fill", 0, 0, W, H)
+	end
 end
 
 
 love.mousepressed = function(x, y, b)
-	if b == 1 and not text then
-		line = {x, y, c = settings.color(), t = "line", straight = straight}
+	x = x + viewport[1]
+	y = y + viewport[2]
+	if b == 1 and not (text or cropping) then
+		line = {x, y, c = settings.color(), t = "line", straight = love.keyboard.isDown("lshift", "rshift")}
 	elseif b == 2 then
 		CP:create(x - 128, y - 128, 128)
 		cp = CP
 	elseif b == 3 then
 		choosing = true
 	end
+
+	if cropping then
+		cropping.held = true
+		if b == 1 then
+			cropping.viewport[1] = x
+			cropping.viewport[2] = y
+			cropping.viewport[3] = 1
+			cropping.viewport[4] = 1
+			print("Starting viewport:", cropping.viewport[1], cropping.viewport[2])
+		end
+	end
 end
 
 
 love.mousemoved = function(x, y)
+	x = x + viewport[1]
+	y = y + viewport[2]
 	if line then
-		if snap and line.straight then
+		if love.keyboard.isDown("lctrl", "rctrl") and line.straight then
 			local dy = y - line[2]
 			local dx = x - line[1]
 			local a = math.atan2(dy, dx)
@@ -165,12 +253,20 @@ love.mousemoved = function(x, y)
 			line[math.max(3, #line + (line.straight and -1 or 1))] = x
 			line[math.max(4, #line + (line.straight and 0 or 1))] = y
 		end
+	elseif cropping and cropping.held then
+		cropping.viewport[3] = math.max(1, x - cropping.viewport[1])
+		cropping.viewport[4] = math.max(1, y - cropping.viewport[2])
 	end
 end
 
 
 love.mousereleased = function(x, y, b)
+	x = x + viewport[1]
+	y = y + viewport[2]
 	if b == 1 then
+		if cropping then
+			cropping.held = false
+		end
 		if not line then
 			return
 		end
@@ -198,43 +294,68 @@ end
 
 
 love.keypressed = function(k, kk)
+	if k == "escape" then
+		text = nil
+		cropping = nil
+		choosing = nil
+		line = nil
+		return
+	end
 
-	if k == "return" then
-		if not text then
-			text = {t = "text", text = "", time = time, c = settings.color()}
-		elseif not love.keyboard.isDown("lshift", "rshift") then
-			addElement(text)
-			text.x, text.y = love.mouse.getPosition()
-			text.size = settings.fontSize
-			text.time = nil
-			text = nil
+	if text then
+		if k == "return" then
+			if love.keyboard.isDown("lshift", "rshift") then
+				text.text = text.text .. "\n"
+			else
+				addElement(text)
+				text.x, text.y = love.mouse.getPosition()
+				text.x = text.x + viewport[1]
+				text.y = text.y + viewport[2]
+				text.size = settings.fontSize
+				text.time = nil
+				text = nil
+			end
 		end
 		return
-	elseif k == "escape" then
-		text = nil
-		choosing = nil
-	elseif k == "shift" or k == "rshift" or k == "lshift" then
-		straight = true
-	elseif k == "ctrl" or k == "rctrl" or k == "lctrl" then
-		snap = true
-	end
-
-	if not text then
-		if k == "z" and love.keyboard.isDown("lctrl", "rctrl") then
-			--elements[#elements] = nil
-			lastElement = math.max(0, lastElement - 1)
-		elseif k == "y" and love.keyboard.isDown("lctrl", "rctrl") then
-			lastElement = math.min(#elements, lastElement + 1)
+	elseif cropping then
+		local magnitude = love.keyboard.isDown("lshift", "rshift") and math.floor(math.min(W/25, H/25)) or 1
+		local dx = k == "left" and -magnitude or k == "right" and magnitude or 0
+		local dy = k == "up" and -magnitude or k == "down" and magnitude or 0
+		if love.keyboard.isDown("lalt") then
+			cropping.viewport[3] = math.clamp(1, cropping.viewport[3] + dx, viewport[1] + W - cropping.viewport[1])
+			cropping.viewport[4] = math.clamp(1, cropping.viewport[4] + dy, viewport[2] + H - cropping.viewport[2])
+		else
+			cropping.viewport[1] = math.clamp(0, cropping.viewport[1] + dx, viewport[1] + W - cropping.viewport[3])
+			cropping.viewport[2] = math.clamp(0, cropping.viewport[2] + dy, viewport[2] + H - cropping.viewport[4])
+		end
+	else
+		if k == "return" then
+			text = {t = "text", text = "", time = time, c = settings.color()}
+		elseif k == "c" then
+			cropping = {viewport = {unpack(viewport)}}
 		end
 	end
+
 end
 
 love.keyreleased = function(k, kk)
-	if k == "shift" or k == "lshift" or k == "rshift" then
-		straight = false
-	elseif k == "ctrl" or k == "rctrl" or k == "lctrl" then
-		snap = false
+	if cropping then
+		if k == "return" then
+			local element = {t = "crop", oldViewport = viewport}
+			element.viewport = {unpack(cropping.viewport)}
+			print("New viewport:", unpack(element.viewport))
+			addElement(element)
+			cropping = false
+			return
+		end
+	else
+		if k == "z" and love.keyboard.isDown("lctrl", "rctrl") then
+			undo()
+		elseif k == "y" and love.keyboard.isDown("lctrl", "rctrl") then
+			redo()
+		end
 	end
+
 end
 
 
