@@ -229,11 +229,13 @@ love.mousepressed = function(x, y, b)
 
 	elseif choosing then
 
+	elseif line then
+
 	else
 		if b == 1 then
 			line = {x, y, c = settings.color(), t = "line", straight = love.keyboard.isDown("lshift", "rshift")}
 		elseif b == 2 then
-			CP:create(x - 128, y - 128, 128)
+			CP:create(x - 128 - viewport[1], y - 128 - viewport[2], 128)
 			cp = CP
 		elseif b == 3 then
 			choosing = true
@@ -292,13 +294,15 @@ love.mousereleased = function(x, y, b)
 		line.size = settings.radius
 		line = nil
 	elseif b == 2 then
-		settings.color[1], settings.color[2], settings.color[3] = unpack(cp.sc)
-		cp = nil
-		if text then
-			text.c = settings.color()
-		end
-		if line then
-			line.c = settings.color()
+		if cp then
+			settings.color[1], settings.color[2], settings.color[3] = unpack(cp.sc)
+			cp = nil
+			if text then
+				text.c = settings.color()
+			end
+			if line then
+				line.c = settings.color()
+			end
 		end
 	elseif b == 3 then
 		if choosing then
@@ -319,6 +323,7 @@ love.keypressed = function(k, kk)
 		cropping = nil
 		choosing = nil
 		line = nil
+		cp = nil
 		return
 	end
 
@@ -348,6 +353,10 @@ love.keypressed = function(k, kk)
 			cropping.viewport[1] = math.clamp(0, cropping.viewport[1] + dx, viewport[1] + W - cropping.viewport[3])
 			cropping.viewport[2] = math.clamp(0, cropping.viewport[2] + dy, viewport[2] + H - cropping.viewport[4])
 		end
+	elseif line then
+
+	elseif choosing then
+
 	else
 		if k == "return" then
 			text = {t = "text", text = "", time = time, c = settings.color()}
