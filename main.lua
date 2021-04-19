@@ -216,23 +216,27 @@ end
 love.mousepressed = function(x, y, b)
 	x = x + viewport[1]
 	y = y + viewport[2]
-	if b == 1 and not (text or cropping) then
-		line = {x, y, c = settings.color(), t = "line", straight = love.keyboard.isDown("lshift", "rshift")}
-	elseif b == 2 then
-		CP:create(x - 128, y - 128, 128)
-		cp = CP
-	elseif b == 3 then
-		choosing = true
-	end
-
 	if cropping then
-		cropping.held = true
 		if b == 1 then
+			cropping.held = true
 			cropping.viewport[1] = x
 			cropping.viewport[2] = y
 			cropping.viewport[3] = 1
 			cropping.viewport[4] = 1
-			print("Starting viewport:", cropping.viewport[1], cropping.viewport[2])
+			cropping.origin = {x, y}
+		end
+	elseif text then
+
+	elseif choosing then
+
+	else
+		if b == 1 then
+			line = {x, y, c = settings.color(), t = "line", straight = love.keyboard.isDown("lshift", "rshift")}
+		elseif b == 2 then
+			CP:create(x - 128, y - 128, 128)
+			cp = CP
+		elseif b == 3 then
+			choosing = true
 		end
 	end
 end
@@ -255,8 +259,21 @@ love.mousemoved = function(x, y)
 			line[math.max(4, #line + (line.straight and 0 or 1))] = y
 		end
 	elseif cropping and cropping.held then
-		cropping.viewport[3] = math.max(1, x - cropping.viewport[1])
-		cropping.viewport[4] = math.max(1, y - cropping.viewport[2])
+		if x >= cropping.origin[1] then
+			cropping.viewport[3] = math.max(1, x - cropping.viewport[1])
+			cropping.viewport[1] = cropping.origin[1]
+		else
+			cropping.viewport[1] = x
+			cropping.viewport[3] = cropping.origin[1] - x
+		end
+
+		if y >= cropping.origin[2] then
+			cropping.viewport[4] = math.max(1, y - cropping.viewport[2])
+			cropping.viewport[2] = cropping.origin[2]
+		else
+			cropping.viewport[2] = y
+			cropping.viewport[4] = cropping.origin[2] - y
+		end
 	end
 end
 
