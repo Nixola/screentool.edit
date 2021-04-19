@@ -171,27 +171,33 @@ love.draw = function(pure)
 			love.graphics.setColor(1,1,1, .5)
 			love.graphics.setFont(font)
 
-			love.graphics.print(cropping.viewport[3] .. "x" .. cropping.viewport[4], cropping.viewport[1] + 2, cropping.viewport[2]) -- move down below, after calculating margins
+			love.graphics.print(cropping.viewport[3] .. "x" .. cropping.viewport[4], cropping.viewport[1] + 2 - viewport[1], cropping.viewport[2] - viewport[2])
 			local mrx, mry, mlx, mly, mtx, mty, mbx, mby
 
-			mlx = math.max(0, cropping.viewport[1] - font:getWidth(tostring(cropping.viewport[1])) - 2)
-			mly = cropping.viewport[2] + cropping.viewport[4] / 2 - font:getHeight() / 2
-			love.graphics.print(cropping.viewport[1], mlx, mly)
+			local ml = cropping.viewport[1] - viewport[1]
+			mlx = math.max(0, cropping.viewport[1] - font:getWidth(ml) - 2 - viewport[1])
+			mly = cropping.viewport[2] + cropping.viewport[4] / 2 - font:getHeight() / 2 - viewport[2]
+			love.graphics.print(ml, math.floor(mlx), math.floor(mly))
 
-			mrx = math.min(cropping.viewport[1] + cropping.viewport[3], W - font:getWidth(W - cropping.viewport[1] - cropping.viewport[3]))
+			local mr = W - cropping.viewport[1] - cropping.viewport[3] + viewport[1]
+			mrx = math.min(W - font:getWidth(mr), cropping.viewport[1] + cropping.viewport[3] - viewport[1])
 			mry = mly
-			love.graphics.print(W - cropping.viewport[1] - cropping.viewport[3], mrx, mry)
+			love.graphics.print(mr, math.floor(mrx), math.floor(mry))
 
-			mtx = cropping.viewport[1]
-			mty = math.max(0, cropping.viewport[2] - font:getHeight())
-			love.graphics.printf(cropping.viewport[2], mtx, mty, cropping.viewport[3], "center")
+			local mt = cropping.viewport[2] - viewport[2]
+			mtx = cropping.viewport[1] - viewport[1]
+			mty = math.max(0, cropping.viewport[2] - font:getHeight() - viewport[2])
+			love.graphics.printf(mt, mtx, mty, cropping.viewport[3], "center")
 
-			mbx = cropping.viewport[1]
-			mby = math.min(H, cropping.viewport[2] + cropping.viewport[4])
+			local mb = H - cropping.viewport[2] - cropping.viewport[4] + viewport[2]
+			mbx = cropping.viewport[1] - viewport[1]
+			mby = math.min(H - font:getHeight(), cropping.viewport[2] + cropping.viewport[4] - viewport[2])
 			love.graphics.printf(H - cropping.viewport[2] - cropping.viewport[4], mbx, mby, cropping.viewport[3], "center")
 		elseif text then
 			--obviously nothing
-		else
+		elseif choosing then
+
+		else --both when drawing a line and when nothing else is happening
 			love.graphics.setColor(1, 1, 1, 0.3)
 			love.graphics.setLineWidth(1)
 			love.graphics.line(0, my - .5, W, my - .5)
