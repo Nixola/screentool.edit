@@ -160,6 +160,7 @@ love.draw = function(pure)
 	end
 	if choosing then
 		zoom:setViewport(mx, my, 1, 1, W, H)
+		love.graphics.setColor(1,1,1)
 		love.graphics.draw(canvas, zoom, mx - 8, my - 8, 0, 16, 16)
 		love.graphics.setColor(1, 1, 1, 0.6)
 		love.graphics.rectangle("line", mx - 9, my - 9, 18, 18)
@@ -283,12 +284,14 @@ love.mousereleased = function(x, y, b)
 			line.c = settings.color()
 		end
 	elseif b == 3 then
-		choosing = false
-		local mx, my = love.mouse.getPosition()
-		love.graphics.captureScreenshot(function(imgD)
-			local r, g, b = canvas:newImageData(1, 1, mx, my, 1, 1):getPixel(0, 0)
-			settings.color[1], settings.color[2], settings.color[3] = r, g, b
-		end)
+		if choosing then
+			choosing = false
+			local mx, my = love.mouse.getPosition()
+			love.graphics.captureScreenshot(function(imgD)
+				local r, g, b = canvas:newImageData(1, 1, mx, my, 1, 1):getPixel(0, 0)
+				settings.color[1], settings.color[2], settings.color[3] = r, g, b
+			end)
+		end
 	end
 end
 
