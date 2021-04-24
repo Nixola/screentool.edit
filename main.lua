@@ -30,6 +30,11 @@ local splash = .5
 
 local zoom = love.graphics.newQuad(0, 0, 16, 16, 1, 1)
 
+local cursors = {}
+cursors.base = love.mouse.getSystemCursor("arrow")
+cursors.cropping = love.mouse.getSystemCursor("crosshair")
+cursors.text = love.mouse.getSystemCursor("ibeam")
+
 do
 	local quad = love.graphics.newQuad(0, 0, W, H, 16, 16)
 	local img = love.graphics.newImage(love.image.newImageData(love.filesystem.newFileData(love.data.decode("string", "base64", 
@@ -330,6 +335,7 @@ love.keypressed = function(k, kk)
 		choosing = nil
 		line = nil
 		cp = nil
+		love.mouse.setCursor(cursors.base)
 		return
 	end
 
@@ -345,6 +351,7 @@ love.keypressed = function(k, kk)
 				text.size = settings.fontSize
 				text.time = nil
 				text = nil
+				love.mouse.setCursor(cursors.base)
 			end
 		end
 		return
@@ -366,8 +373,10 @@ love.keypressed = function(k, kk)
 	else
 		if k == "return" then
 			text = {t = "text", text = "", time = time, c = settings.color()}
+			love.mouse.setCursor(cursors.text)
 		elseif k == "c" then
 			cropping = {viewport = {unpack(viewport)}}
+			love.mouse.setCursor(cursors.cropping)
 		end
 	end
 
@@ -378,9 +387,9 @@ love.keyreleased = function(k, kk)
 		if k == "return" then
 			local element = {t = "crop", oldViewport = viewport}
 			element.viewport = {unpack(cropping.viewport)}
-			print("New viewport:", unpack(element.viewport))
 			addElement(element)
 			cropping = false
+			love.mouse.setCursor(cursors.base)
 			return
 		end
 	else
